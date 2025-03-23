@@ -10,5 +10,8 @@ python-binance
 dotenv
 beautifulsoup4
 python-dotenv
+tensorflow
+keras
+ta
 
 #-e .
