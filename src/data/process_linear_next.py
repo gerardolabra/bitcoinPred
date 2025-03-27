@@ -6,16 +6,16 @@ from ta.volatility import BollingerBands
 from ta.trend import MACD
 import joblib
 
-def process_linear():
+def process_linear_next():
     """
-    Processes raw Bitcoin data to generate features for linear regression, including
+    Processes raw Bitcoin data to generate features for next-day prediction, including
     technical indicators, lagged features, rolling statistics, and normalized data.
     Saves the processed data to a CSV file.
     """
     script_dir = os.path.dirname(os.path.abspath(__file__))
     input_file = os.path.join(script_dir, '../../data/raw/btc_data.csv')
     output_dir = os.path.join(script_dir, '../../data/processed')
-    output_file = os.path.join(output_dir, 'btc_linear.csv')
+    output_file = os.path.join(output_dir, 'btc_linear_next.csv')
     os.makedirs(output_dir, exist_ok=True)
     
     # Load the raw data
@@ -59,23 +59,33 @@ def process_linear():
         df[f'close_lag_{lag}'] = df['close'].shift(lag)
         df[f'returns_lag_{lag}'] = df['returns'].shift(lag)
     
+    # Add the next day's close price as the target variable
+    df['next_day_close'] = df['close'].shift(-1)  # Shift the 'close' column by -1 to create the target
+
     # Drop the original 'timestamp' column after extracting features
     df = df.drop(columns=["timestamp"])
     
-    # Drop rows with NaN values (caused by rolling calculations and lagging)
+    # Drop rows with NaN values (caused by rolling calculations, lagging, and shifting)
     df = df.dropna().reset_index(drop=True)
 
     # Save a separate scaler for the 'close' column BEFORE normalization
     close_scaler = MinMaxScaler()
     close_scaler.fit(df[['close']])  # Fit the scaler to the original 'close' column
-    close_scaler_path = os.path.join(output_dir, 'close_scaler.pkl')
+    close_scaler_path = os.path.join(output_dir, 'close_scaler_next.pkl')
     joblib.dump(close_scaler, close_scaler_path)
     print(f"Close scaler saved to {close_scaler_path}")
+
+    # Debug: Print close scaler attributes
+    print("Close Scaler Attributes:")
+    print(f"Min: {close_scaler.data_min_}, Max: {close_scaler.data_max_}")
+
+    # Normalize the 'close' column using the close scaler
+    df['close'] = close_scaler.transform(df[['close']])
 
     # Normalize numerical features using Min-Max scaling
     scaler = MinMaxScaler()
     numerical_features = [
-        'close', 'returns', 'moving_avg_7', 'moving_avg_30', 'volatility_7', 'volatility_30',
+        'returns', 'moving_avg_7', 'moving_avg_30', 'volatility_7', 'volatility_30',
         'rolling_mean_14', 'rolling_std_14', 'rolling_mean_30', 'rolling_std_30',
         'RSI', 'upper_band', 'lower_band', 'middle_band', 'MACD', 'MACD_signal', 'MACD_hist',
         'close_lag_1', 'close_lag_2', 'close_lag_3', 'returns_lag_1', 'returns_lag_2', 'returns_lag_3'
@@ -83,9 +93,27 @@ def process_linear():
     df[numerical_features] = scaler.fit_transform(df[numerical_features])
 
     # Save the scaler for all numerical features
-    scaler_path = os.path.join(output_dir, 'scaler.pkl')
+    scaler_path = os.path.join(output_dir, 'scaler_next.pkl')
     joblib.dump(scaler, scaler_path)
     print(f"Scaler saved to {scaler_path}")
+
+    # Debug: Print general scaler attributes
+    print("General Scaler Attributes:")
+    print(f"Min: {scaler.data_min_}, Max: {scaler.data_max_}")
+
+    # Reorder columns to ensure consistency
+    column_order = [
+        'year', 'month', 'day', 'returns', 'moving_avg_7', 'moving_avg_30', 'volatility_7', 'volatility_30',
+        'rolling_mean_14', 'rolling_std_14', 'rolling_mean_30', 'rolling_std_30',
+        'RSI', 'upper_band', 'lower_band', 'middle_band', 'MACD', 'MACD_signal', 'MACD_hist',
+        'close_lag_1', 'close_lag_2', 'close_lag_3', 'returns_lag_1', 'returns_lag_2', 'returns_lag_3',
+        'close', 'next_day_close'
+    ]
+    df = df[column_order]
+
+    # Debug: Print the first few rows of the processed data
+    print("Processed Data (First Few Rows):")
+    print(df.head())
 
     # Save the processed data
     df.to_csv(output_file, index=False)
@@ -93,4 +121,4 @@ def process_linear():
 
 
 if __name__ == '__main__':
-    process_linear()
+    process_linear_next()

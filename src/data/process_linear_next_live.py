@@ -6,16 +6,15 @@ from ta.volatility import BollingerBands
 from ta.trend import MACD
 import joblib
 
-def process_linear():
+def process_linear_next_live():
     """
-    Processes raw Bitcoin data to generate features for linear regression, including
-    technical indicators, lagged features, rolling statistics, and normalized data.
-    Saves the processed data to a CSV file.
+    Processes raw Bitcoin data to generate features for live next-day prediction, excluding the target variable.
+    Saves the processed data to a CSV file for use in live predictions.
     """
     script_dir = os.path.dirname(os.path.abspath(__file__))
     input_file = os.path.join(script_dir, '../../data/raw/btc_data.csv')
     output_dir = os.path.join(script_dir, '../../data/processed')
-    output_file = os.path.join(output_dir, 'btc_linear.csv')
+    output_file = os.path.join(output_dir, 'btc_linear_next_live.csv')
     os.makedirs(output_dir, exist_ok=True)
     
     # Load the raw data
@@ -65,32 +64,49 @@ def process_linear():
     # Drop rows with NaN values (caused by rolling calculations and lagging)
     df = df.dropna().reset_index(drop=True)
 
-    # Save a separate scaler for the 'close' column BEFORE normalization
-    close_scaler = MinMaxScaler()
-    close_scaler.fit(df[['close']])  # Fit the scaler to the original 'close' column
-    close_scaler_path = os.path.join(output_dir, 'close_scaler.pkl')
-    joblib.dump(close_scaler, close_scaler_path)
-    print(f"Close scaler saved to {close_scaler_path}")
+    # Load the scalers from process_linear_next
+    close_scaler_path = os.path.join(output_dir, 'close_scaler_next.pkl')
+    scaler_path = os.path.join(output_dir, 'scaler_next.pkl')
 
-    # Normalize numerical features using Min-Max scaling
-    scaler = MinMaxScaler()
+    if not os.path.exists(close_scaler_path) or not os.path.exists(scaler_path):
+        raise FileNotFoundError("Required scalers not found. Ensure process_linear_next.py has been executed.")
+
+    close_scaler = joblib.load(close_scaler_path)
+    print(f"Loaded close scaler from {close_scaler_path}")
+
+    scaler = joblib.load(scaler_path)
+    print(f"Loaded numerical features scaler from {scaler_path}")
+
+    # Normalize the 'close' column using the close scaler
+    df["close"] = close_scaler.transform(df[["close"]])
+
+    # Normalize numerical features using the loaded scaler
     numerical_features = [
-        'close', 'returns', 'moving_avg_7', 'moving_avg_30', 'volatility_7', 'volatility_30',
+        'returns', 'moving_avg_7', 'moving_avg_30', 'volatility_7', 'volatility_30',
         'rolling_mean_14', 'rolling_std_14', 'rolling_mean_30', 'rolling_std_30',
         'RSI', 'upper_band', 'lower_band', 'middle_band', 'MACD', 'MACD_signal', 'MACD_hist',
         'close_lag_1', 'close_lag_2', 'close_lag_3', 'returns_lag_1', 'returns_lag_2', 'returns_lag_3'
     ]
-    df[numerical_features] = scaler.fit_transform(df[numerical_features])
+    df[numerical_features] = scaler.transform(df[numerical_features])
 
-    # Save the scaler for all numerical features
-    scaler_path = os.path.join(output_dir, 'scaler.pkl')
-    joblib.dump(scaler, scaler_path)
-    print(f"Scaler saved to {scaler_path}")
+    # Drop the 'next_day_close' column (if it exists) for live predictions
+    if 'next_day_close' in df.columns:
+        df = df.drop(columns=['next_day_close'])
 
-    # Save the processed data
+    # Reorder columns to ensure consistency with training data
+    column_order = [
+        'year', 'month', 'day', 'returns', 'moving_avg_7', 'moving_avg_30', 'volatility_7', 'volatility_30',
+        'rolling_mean_14', 'rolling_std_14', 'rolling_mean_30', 'rolling_std_30',
+        'RSI', 'upper_band', 'lower_band', 'middle_band', 'MACD', 'MACD_signal', 'MACD_hist',
+        'close_lag_1', 'close_lag_2', 'close_lag_3', 'returns_lag_1', 'returns_lag_2', 'returns_lag_3',
+        'close'
+    ]
+    df = df[column_order]
+
+    # Save the processed data for live predictions
     df.to_csv(output_file, index=False)
     print(f"Data processed and saved to {output_file}")
 
 
 if __name__ == '__main__':
-    process_linear()
+    process_linear_next_live()
