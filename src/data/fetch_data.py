@@ -1,11 +1,9 @@
 import os
 import requests
 import pandas as pd
-from dotenv import load_dotenv
-
 import streamlit as st
 
-#  APIAccess keys from Streamlit Secrets
+# Access API keys from Streamlit Secrets
 api_key = st.secrets["BINANCE_API_KEY"]
 api_secret = st.secrets["BINANCE_API_SECRET"]
 
@@ -24,7 +22,7 @@ def fetch_btc_data(symbol='BTCUSDT', interval='1d', start_str='1 Jan 2017'):
     }
     
     headers = {
-        'X-MBX-APIKEY': API_KEY
+        'X-MBX-APIKEY': api_key  # Corrected variable name
     }
     
     all_data = []
