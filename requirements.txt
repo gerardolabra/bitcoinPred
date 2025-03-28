@@ -7,11 +7,15 @@ catboost
 xgboost
 Flask
 python-binance
-dotenv
 beautifulsoup4
 python-dotenv
 tensorflow
 keras
 ta
+streamlit
+joblib
+scipy
+requests
+
 
 #-e .

@@ -15,16 +15,20 @@ import pickle
 # Function to execute a script
 def execute_script(script_path):
     """
-    Executes a Python script.
+    Executes a Python script and captures its output.
     """
     try:
-        subprocess.run(["python", script_path], check=True)
+        result = subprocess.run(
+            ["python", script_path],
+            check=True,
+            capture_output=True,
+            text=True
+        )
         st.success(f"Executed {script_path} successfully!")
-    except Exception as e:
-        st.error(f"Error executing {script_path}: {e}")
+    except subprocess.CalledProcessError as e:
+        st.error(f"Error executing {script_path}: {e.stderr}")
 
 # Function to load data
-@st.cache
 def load_data(file_path):
     """
     Loads the processed data from a CSV file.
@@ -49,17 +53,18 @@ st.sidebar.title("Options")
 # Sidebar options
 st.sidebar.header("Actions")
 fetch_data_button = st.sidebar.button("Fetch and Process Data")
-model_choice = st.sidebar.selectbox("Select a Model", ["Linear Regression", "RNN", "LSTM", "XGBoost", "LightGBM", "Stochastic Simulation"])
+model_choice = st.sidebar.selectbox("Select a Model", ["LSTM", "Stochastic Simulation", "Linear Regression"])
 
 # Fetch and process data if button is clicked
 if fetch_data_button:
     # Execute all required scripts
+    execute_script("src/data/fetch_data.py")
+    execute_script("src/data/process_data.py")
     execute_script("src/data/process_linear_next.py")
     execute_script("src/data/process_linear_next_live.py")
     execute_script("src/data/process_lstm.py")
-    execute_script("src/data/process_gradient_boosting.py")
-    execute_script("src/data/fetch_data.py")
-    execute_script("src/data/process_data.py")
+    execute_script("src/data/process_lstm_live.py")
+    
     
 
 # Main section
@@ -146,109 +151,117 @@ if model_choice == "Linear Regression":
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
 
-elif model_choice == "RNN":
-    st.header("RNN Predictions")
-    try:
-        # Load the processed data and model
-        rnn_data = load_data("data/processed/btc_lstm.csv")
-        rnn_model = load_model("src/models/rnn_model.h5")
-
-        # Make predictions dynamically
-        X = rnn_data.drop(columns=["close"]).values  # Use all features except the target column
-        y_actual = rnn_data["close"]  # The actual target values
-        X = X.reshape((X.shape[0], 30, -1))  # Adjust shape for RNN
-        y_pred = rnn_model.predict(X)
-
-        # Add 'actual' and 'predicted' columns to the DataFrame
-        rnn_data["actual"] = y_actual
-        rnn_data["predicted"] = y_pred.flatten()
-
-        # Plot predictions
-        plot_predictions(rnn_data["actual"], rnn_data["predicted"], "RNN: Actual vs Predicted")
-        mae = mean_absolute_error(rnn_data["actual"], rnn_data["predicted"])
-        rmse = np.sqrt(mean_squared_error(rnn_data["actual"], rnn_data["predicted"]))
-        st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
-        st.write(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
-    except Exception as e:
-        st.error(f"Error: {e}")
-
 elif model_choice == "LSTM":
     st.header("LSTM Predictions")
     try:
-        # Load the processed data and model
-        lstm_data = load_data("data/processed/btc_lstm.csv")
-        lstm_model = load_model("src/models/lstm_model.h5")
+        # Load the processed live data and the trained LSTM model
+        live_data = load_data("data/processed/btc_lstm_live.csv")
+        lstm_model = load_model("src/models/lstm_daily_model.keras")
 
-        # Make predictions dynamically
-        X = lstm_data.drop(columns=["close"]).values  # Use all features except the target column
-        y_actual = lstm_data["close"]  # The actual target values
-        X = X.reshape((X.shape[0], 30, -1))  # Adjust shape for LSTM
-        y_pred = lstm_model.predict(X)
+        # Define the features used during training
+        features = [
+            'close', 'volume', 'RSI', 'upper_band', 'lower_band',
+            'middle_band', 'MACD', 'MACD_signal', 'MACD_hist',
+            'close_lag_1', 'close_lag_3', 'close_lag_5', 'close_lag_15', 'close_lag_30',
+            'volume_lag_1', 'volume_lag_3', 'volume_lag_5', 'volume_lag_15', 'volume_lag_30',
+            'volatility_5', 'volatility_15', 'volatility_30',
+            'returns_5', 'returns_15', 'returns_30'
+        ]
 
-        # Add 'actual' and 'predicted' columns to the DataFrame
-        lstm_data["actual"] = y_actual
-        lstm_data["predicted"] = y_pred.flatten()
+        # Create a DataFrame for extracting the latest date (includes year, month, day)
+        full_data = live_data.copy()
 
-        # Plot predictions
-        plot_predictions(lstm_data["actual"], lstm_data["predicted"], "LSTM: Actual vs Predicted")
-        mae = mean_absolute_error(lstm_data["actual"], lstm_data["predicted"])
-        rmse = np.sqrt(mean_squared_error(lstm_data["actual"], lstm_data["predicted"]))
-        st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
-        st.write(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
-    except Exception as e:
+        # Create a DataFrame for feeding the model (only includes features)
+        live_data = live_data[features]
+
+        # Check if there are enough rows for the window size
+        window_size = 30  # Ensure this matches the window size used during training
+        num_features = len(features)  # Number of features in the live data
+        if len(live_data) < window_size:
+            st.error(
+                f"Not enough data for prediction. The live data contains only {len(live_data)} rows, "
+                f"but at least {window_size} rows are required. Please wait for more data to accumulate."
+            )
+        else:
+            # Extract the last `window_size` rows for prediction
+            live_sequence = live_data.iloc[-window_size:].values.reshape(1, window_size, num_features)
+
+            # Make the prediction
+            predicted_next_day_close = lstm_model.predict(live_sequence)[0][0]
+
+            # Load the target scaler to denormalize the prediction
+            target_scaler = joblib.load("data/processed/target_scaler.pkl")
+            denormalized_price = target_scaler.inverse_transform([[predicted_next_day_close]])[0][0]
+
+            # Extract the latest date from the full dataset
+            latest_row = full_data.iloc[-1]
+            latest_year = int(latest_row["year"])
+            latest_month = int(latest_row["month"])
+            latest_day = int(latest_row["day"])
+
+            # Display the live prediction with the date
+            st.subheader("Predicted Next Day Close Price")
+            st.write(
+                f"The predicted close price for tomorrow, using Binance information up to "
+                f"**{latest_year}-{latest_month:02d}-{latest_day:02d}**, is: **${denormalized_price:.2f}**"
+            )
+
+            # --- Historical Evaluation ---
+            # Use the last 180 rows for evaluation
+            N = 180  # Number of rows to compare
+
+            # Load the btc_daily.csv file for historical evaluation
+            btc_daily = load_data("data/processed/btc_daily.csv")
+
+            if len(btc_daily) >= N + window_size:  # Ensure enough rows for the sliding window
+                # Extract the last N + window_size rows for evaluation
+                evaluation_data = btc_daily.iloc[-(N + window_size):]
+
+                # Prepare features and target for evaluation
+                X_live = []
+                y_actual = []
+                for i in range(len(evaluation_data) - window_size):
+                    # Use only the features for the input sequence
+                    X_live.append(evaluation_data[features].iloc[i:i + window_size].values)
+                    # Use the 'next_day_close' column for the target
+                    y_actual.append(evaluation_data.iloc[i + window_size]["next_day_close"])
+
+                # Convert to numpy arrays
+                X_live = np.array(X_live)
+                y_actual = np.array(y_actual)
+
+                # Make predictions
+                y_pred_normalized = lstm_model.predict(X_live).flatten()
+
+                # Denormalize the predictions and actual values
+                target_scaler = joblib.load("data/processed/target_scaler.pkl")
+                y_pred = target_scaler.inverse_transform(y_pred_normalized.reshape(-1, 1)).flatten()
+                y_actual = target_scaler.inverse_transform(y_actual.reshape(-1, 1)).flatten()
+
+                # Calculate metrics
+                mae = mean_absolute_error(y_actual, y_pred)
+                rmse = np.sqrt(mean_squared_error(y_actual, y_pred))
+                r2 = r2_score(y_actual, y_pred)
+
+                # Display metrics
+                st.subheader("Model Performance on Historical Data (Last 180 Rows)")
+                st.write(f"Mean Absolute Error (MAE): **{mae:.2f}**")
+                st.write(f"Root Mean Squared Error (RMSE): **{rmse:.2f}**")
+                st.write(f"R² Score: **{r2:.2f}**")
+
+                # Plot predictions vs actual values
+                st.subheader("Prediction vs Actual (Last 180 Days)")
+                plot_predictions(y_actual, y_pred, "LSTM: Actual vs Predicted")
+            else:
+                st.error(
+                    f"Not enough data for historical evaluation. The btc_daily dataset contains only {len(btc_daily)} rows, "
+                    f"but at least {N + window_size} rows are required."
+                )
+
+    except FileNotFoundError as e:
         st.error(f"Error: {e}")
-
-elif model_choice == "XGBoost":
-    st.header("XGBoost Predictions")
-    try:
-        # Load the processed data and model
-        xgboost_data = load_data("data/processed/btc_gradient_boosting.csv")
-        with open("src/models/xgboost_model.pkl", "rb") as f:
-            xgboost_model = pickle.load(f)
-
-        # Make predictions dynamically
-        X = xgboost_data.drop(columns=["close"])  # Use all features except the target column
-        y_actual = xgboost_data["close"]  # The actual target values
-        y_pred = xgboost_model.predict(X)
-
-        # Add 'actual' and 'predicted' columns to the DataFrame
-        xgboost_data["actual"] = y_actual
-        xgboost_data["predicted"] = y_pred
-
-        # Plot predictions
-        plot_predictions(xgboost_data["actual"], xgboost_data["predicted"], "XGBoost: Actual vs Predicted")
-        mae = mean_absolute_error(xgboost_data["actual"], xgboost_data["predicted"])
-        rmse = np.sqrt(mean_squared_error(xgboost_data["actual"], xgboost_data["predicted"]))
-        st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
-        st.write(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
     except Exception as e:
-        st.error(f"Error: {e}")
-
-elif model_choice == "LightGBM":
-    st.header("LightGBM Predictions")
-    try:
-        # Load the processed data and model
-        lightgbm_data = load_data("data/processed/btc_gradient_boosting.csv")
-        with open("src/models/lightgbm_model.pkl", "rb") as f:
-            lightgbm_model = pickle.load(f)
-
-        # Make predictions dynamically
-        X = lightgbm_data.drop(columns=["close"])  # Use all features except the target column
-        y_actual = lightgbm_data["close"]  # The actual target values
-        y_pred = lightgbm_model.predict(X)
-
-        # Add 'actual' and 'predicted' columns to the DataFrame
-        lightgbm_data["actual"] = y_actual
-        lightgbm_data["predicted"] = y_pred
-
-        # Plot predictions
-        plot_predictions(lightgbm_data["actual"], lightgbm_data["predicted"], "LightGBM: Actual vs Predicted")
-        mae = mean_absolute_error(lightgbm_data["actual"], lightgbm_data["predicted"])
-        rmse = np.sqrt(mean_squared_error(lightgbm_data["actual"], lightgbm_data["predicted"]))
-        st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
-        st.write(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
-    except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"An unexpected error occurred: {e}")
 
 elif model_choice == "Stochastic Simulation":
     st.header("Stochastic Simulation")
@@ -256,9 +269,24 @@ elif model_choice == "Stochastic Simulation":
         # Load the dataset
         data = load_data("data/processed/btc_data_processed.csv")
         
+        # Extract the latest date directly from the 'timestamp' column
+        latest_date = data.iloc[-1]["timestamp"]  # The latest date is already in 'YYYY-MM-DD' format
+
+        # Display the description with the latest date
+        st.write(
+            f"Stochastic Simulator using Geometric Brownian Motion, fed with Binance information dated "
+            f"**{latest_date}**."
+        )
+
         # Run the stochastic simulation
-        st.write("Running stochastic simulation for the next 30 days...")
-        simulate_btc_prices(data)
+        st.write("Running Stochastic Simulation for the next 30 days...")
+        prices, drop_prob, increase_prob = simulate_btc_prices(data)
+
+        # Display the probabilities
+        st.subheader("Simulation Results")
+        st.write(f"Probability of >20% drop in 30 days: **{drop_prob:.2f}%**")
+        st.write(f"Probability of >20% increase in 30 days: **{increase_prob:.2f}%**")
+
     except FileNotFoundError as e:
         st.error(f"Error: {e}")
     except Exception as e:

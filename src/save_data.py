@@ -2,53 +2,72 @@ import os
 import sys
 import pandas as pd
 from binance.client import Client
+from dotenv import load_dotenv
+import time
 
-# Add the parent directory to the system path to import get_historical_data
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.binance_data import get_historical_data  # Use absolute import
+# Load environment variables from .env file
+load_dotenv()
 
-# Initialize Binance client
-api_key = 'your_api_key'
-api_secret = 'your_api_secret'
+# Initialize Binance client using API keys from .env
+api_key = os.getenv('BINANCE_API_KEY')
+api_secret = os.getenv('BINANCE_API_SECRET')
+
+if not api_key or not api_secret:
+    raise ValueError("API keys are missing. Please set them in the .env file.")
+
 client = Client(api_key, api_secret)
 
 def save_crypto_data(tokens):
+    """
+    Save historical data for a list of tokens to CSV files.
+    """
     for symbol, filename in tokens:
-        df = get_historical_data(symbol)
-        file_path = os.path.join("data", filename)
-        os.makedirs("data", exist_ok=True)  # Ensure directory exists
-        df.to_csv(file_path, index=False)
-        print(f"Data saved to {file_path}")
+        try:
+            df = get_historical_data(symbol)
+            # Save to the `data/raw/` directory
+            file_path = os.path.join("data", "raw", filename)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)  # Ensure directory exists
+            df.to_csv(file_path, index=False)
+            print(f"Data saved to {file_path}")
+            time.sleep(1)  # Pause to avoid hitting API rate limits
+        except Exception as e:
+            print(f"Error saving data for {symbol}: {e}")
 
 def get_historical_data(symbol):
-    """Fetch historical klines (candlestick data) for a given symbol from Binance."""
-    klines = client.get_historical_klines(symbol, Client.KLINE_INTERVAL_1DAY, "1 Jan 2017")
-    # Convert to DataFrame
-    df = pd.DataFrame(klines, columns=[
-        'timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 
-        'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 
-        'taker_buy_quote_asset_volume', 'ignore'
-    ])
-    # Convert timestamp to datetime
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    return df
+    """
+    Fetch historical klines (candlestick data) for a given symbol from Binance.
+    """
+    try:
+        klines = client.get_historical_klines(symbol, Client.KLINE_INTERVAL_1DAY, "1 Jan 2017")
+        # Convert to DataFrame
+        df = pd.DataFrame(klines, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time', 
+            'quote_asset_volume', 'number_of_trades', 'taker_buy_base_asset_volume', 
+            'taker_buy_quote_asset_volume', 'ignore'
+        ])
+        # Convert timestamp to datetime
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        return df
+    except Exception as e:
+        print(f"Error fetching historical data for {symbol}: {e}")
+        return pd.DataFrame()  # Return an empty DataFrame on failure
 
 def get_24h_volume(symbol):
-    """Get the 24-hour trading volume for a given symbol from Binance."""
-    ticker = client.get_ticker(symbol=symbol)
-    volume = ticker['quoteVolume']
-    return volume
+    """
+    Get the 24-hour trading volume for a given symbol from Binance.
+    """
+    try:
+        ticker = client.get_ticker(symbol=symbol)
+        volume = ticker['quoteVolume']
+        return volume
+    except Exception as e:
+        print(f"Error fetching 24-hour volume for {symbol}: {e}")
+        return None
 
 if __name__ == "__main__":
     # List of tokens and their corresponding filenames
     tokens = [
         ("BTCUSDT", "btc_data.csv"),
-        ("FTTUSDT", "ftt_data.csv"),
-        ("USTCUSDT", "usct_data.csv"),
-        ("RUNEUSDT", "rune_data.csv"),
-        ("BNBUSDT", "bnb_data.csv"),
-        ("ETHUSDT", "eth_data.csv"),
-        ("XRPUSDT", "xrp_data.csv"),
         # Add more tokens here as needed
     ]
     
@@ -57,4 +76,5 @@ if __name__ == "__main__":
     
     # Get and print the 24-hour trading volume for BTC
     btc_volume = get_24h_volume("BTCUSDT")
-    print(f"24-hour trading volume for BTC: ${btc_volume}")
+    if btc_volume:
+        print(f"24-hour trading volume for BTC: ${btc_volume}")

@@ -2,6 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import streamlit as st 
 
 def load_data(file_path="data/processed/btc_data_processed.csv"):
     """Load the dataset into a pandas DataFrame."""
@@ -12,6 +13,8 @@ def load_data(file_path="data/processed/btc_data_processed.csv"):
     df["timestamp"] = pd.to_datetime(df["timestamp"])  # Convert timestamps
     return df
 
+import streamlit as st  # Import Streamlit for rendering plots
+
 def simulate_btc_prices(df):
     """
     Simulates Bitcoin prices for the next 30 days using a stochastic model.
@@ -21,6 +24,8 @@ def simulate_btc_prices(df):
 
     Returns:
         np.ndarray: Simulated price paths.
+        float: Probability of >20% drop in 30 days.
+        float: Probability of >20% increase in 30 days.
     """
     # Last 30 days for params
     recent = df.tail(30)
@@ -57,8 +62,9 @@ def simulate_btc_prices(df):
     plt.xlabel("Days")
     plt.ylabel("Price (USD)")
     plt.legend()
-    plt.show()
 
-    print(f"Probability of >20% drop in 30 days: {drop_prob:.2f}%")
-    print(f"Probability of >20% increase in 30 days: {increase_prob:.2f}%")
-    return prices
+    # Render the plot in Streamlit
+    st.pyplot(plt)
+
+    # Return probabilities
+    return prices, drop_prob, increase_prob
