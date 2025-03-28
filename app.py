@@ -73,7 +73,7 @@ model_choice = st.sidebar.selectbox("Select a Model", ["LSTM", "Stochastic Simul
 # Fetch and process data if button is clicked
 if fetch_data_button:
     # Execute all required scripts
-    execute_script("src/data/fetch_data.py")
+    execute_script("src/save_data.py")
     execute_script("src/data/process_data.py")
     execute_script("src/data/process_linear_next.py")
     execute_script("src/data/process_linear_next_live.py")

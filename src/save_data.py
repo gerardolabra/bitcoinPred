@@ -2,18 +2,14 @@ import os
 import sys
 import pandas as pd
 from binance.client import Client
-from dotenv import load_dotenv
 import time
+import streamlit as st
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Initialize Binance client using API keys from .env
-api_key = os.getenv('BINANCE_API_KEY')
-api_secret = os.getenv('BINANCE_API_SECRET')
+api_key = st.secrets["BINANCE_API_KEY"]
+api_secret = st.secrets["BINANCE_API_SECRET"]
 
 if not api_key or not api_secret:
-    raise ValueError("API keys are missing. Please set them in the .env file.")
+    raise ValueError("API keys are missing. Please check your Streamlit secrets.")
 
 client = Client(api_key, api_secret)
 

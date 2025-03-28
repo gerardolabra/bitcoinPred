@@ -22,22 +22,31 @@ def fetch_btc_data(symbol='BTCUSDT', interval='1d', start_str='1 Jan 2017'):
     }
     
     headers = {
-        'X-MBX-APIKEY': api_key  # Corrected variable name
+        'X-MBX-APIKEY': api_key
     }
     
     all_data = []
     while True:
         response = requests.get(base_url + endpoint, headers=headers, params=params)
-        data = response.json()
-        
-        if not data:
+
+        # Debugging output
+        print(f"Request URL: {response.url}")
+        print(f"Response Status Code: {response.status_code}")
+        print(f"Response JSON: {response.json()}")
+
+        if response.status_code != 200:
+            print(f"Error: {response.status_code}, {response.text}")
             break
-        
+
+        data = response.json()
+
+        if not data:
+            print("No data returned from Binance API. Exiting loop.")
+            break
+
         all_data.extend(data)
-        
-        # Update startTime to the last timestamp + 1 to avoid overlapping
         params['startTime'] = data[-1][0] + 1
-    
+
     # Convert data to DataFrame
     df = pd.DataFrame(all_data, columns=[
         'timestamp', 'open', 'high', 'low', 'close', 'volume', 'close_time',
