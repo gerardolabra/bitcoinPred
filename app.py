@@ -12,6 +12,22 @@ from src.models.stochastic_sim import simulate_btc_prices
 from tensorflow.keras.models import load_model
 import pickle
 
+import subprocess
+import sys
+
+def check_installed_packages():
+    required_packages = ["requests", "pandas"]
+    for package in required_packages:
+        try:
+            __import__(package)
+        except ImportError:
+            print(f"Package {package} is missing. Installing...")
+            subprocess.run([sys.executable, "-m", "pip", "install", package])
+
+check_installed_packages()
+
+
+
 # Function to execute a script
 def execute_script(script_path):
     import sys
