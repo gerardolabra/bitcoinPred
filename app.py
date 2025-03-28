@@ -14,12 +14,11 @@ import pickle
 
 # Function to execute a script
 def execute_script(script_path):
-    """
-    Executes a Python script and captures its output.
-    """
+    import sys
+    print(f"Executing script with Python: {sys.executable}")
     try:
         result = subprocess.run(
-            ["python", script_path],
+            [sys.executable, script_path],  # Use sys.executable to ensure the correct Python interpreter is used
             check=True,
             capture_output=True,
             text=True
