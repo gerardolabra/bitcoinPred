@@ -6,6 +6,9 @@ from ta.volatility import BollingerBands
 from ta.trend import MACD
 import joblib
 
+import sys
+print(f"Python executable: {sys.executable}")
+
 def process_linear_next_live():
     """
     Processes raw Bitcoin data to generate features for live next-day prediction, excluding the target variable.

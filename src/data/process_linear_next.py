@@ -5,6 +5,8 @@ from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
 from ta.trend import MACD
 import joblib
+import sys
+print(f"Python executable: {sys.executable}")
 
 def process_linear_next():
     """

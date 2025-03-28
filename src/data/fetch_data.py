@@ -3,10 +3,14 @@ import requests
 import pandas as pd
 from dotenv import load_dotenv
 
-# Load API keys from .env file
-load_dotenv()
-API_KEY = os.getenv('BINANCE_API_KEY')
-API_SECRET = os.getenv('BINANCE_API_SECRET')
+import streamlit as st
+
+#  APIAccess keys from Streamlit Secrets
+api_key = st.secrets["BINANCE_API_KEY"]
+api_secret = st.secrets["BINANCE_API_SECRET"]
+
+print(f"API Key: {api_key}")
+print(f"API Secret: {api_secret}")
 
 # Function to fetch historical BTC data from Binance API
 def fetch_btc_data(symbol='BTCUSDT', interval='1d', start_str='1 Jan 2017'):
