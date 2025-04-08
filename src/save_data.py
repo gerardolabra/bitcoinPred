@@ -1,30 +1,56 @@
 import os
-import sys
 import pandas as pd
 from binance.client import Client
 import time
-import streamlit as st
+import boto3
+from dotenv import load_dotenv
 
-api_key = st.secrets["BINANCE_API_KEY"]
-api_secret = st.secrets["BINANCE_API_SECRET"]
+# Load environment variables from .env file
+load_dotenv()
 
-if not api_key or not api_secret:
-    raise ValueError("API keys are missing. Please check your Streamlit secrets.")
+# Get API keys from environment variables
+API_KEY = os.getenv("BINANCE_API_KEY")
+API_SECRET = os.getenv("BINANCE_API_SECRET")
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_REGION = "eu-central-1"  # Frankfurt region
+S3_BUCKET_NAME = "bitcoin-data-gl"  # Replace with your bucket name
 
-client = Client(api_key, api_secret)
+if not API_KEY or not API_SECRET:
+    raise ValueError("Binance API keys are missing. Please check your .env file.")
+
+if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
+    raise ValueError("AWS keys are missing. Please check your .env file.")
+
+# Initialize Binance client
+client = Client(API_KEY, API_SECRET)
+
+# Initialize S3 client
+s3 = boto3.client(
+    "s3",
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    region_name=AWS_REGION,
+)
 
 def save_crypto_data(tokens):
     """
-    Save historical data for a list of tokens to CSV files.
+    Save historical data for a list of tokens to CSV files and upload to S3.
     """
     for symbol, filename in tokens:
         try:
             df = get_historical_data(symbol)
             # Save to the `data/raw/` directory
-            file_path = os.path.join("data", "raw", filename)
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)  # Ensure directory exists
-            df.to_csv(file_path, index=False)
-            print(f"Data saved to {file_path}")
+            local_file_path = os.path.join("data", "raw", filename)
+            os.makedirs(os.path.dirname(local_file_path), exist_ok=True)  # Ensure directory exists
+            df.to_csv(local_file_path, index=False)
+            print(f"Data saved locally to {local_file_path}")
+
+            # Upload to S3
+            s3_file_path = f"raw/{filename}"  # Path in the S3 bucket
+            s3.upload_file(local_file_path, S3_BUCKET_NAME, s3_file_path)
+            print(f"File uploaded to S3: s3://{S3_BUCKET_NAME}/{s3_file_path}")
+
             time.sleep(1)  # Pause to avoid hitting API rate limits
         except Exception as e:
             print(f"Error saving data for {symbol}: {e}")

@@ -1,16 +1,31 @@
 import os
 import pandas as pd
+import requests
 
 # In process_data.py, update process_btc_data()
 def process_btc_data():
+    # Public URL of the raw data in S3
+    s3_url = "https://bitcoin-data-gl.s3.eu-central-1.amazonaws.com/raw/btc_data.csv"
+    
+    # Define the output directory and file
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    input_file = os.path.join(script_dir, '../../data/raw/btc_data.csv')
     output_dir = os.path.join(script_dir, '../../data/processed')
     output_file = os.path.join(output_dir, 'btc_data_processed.csv')
     os.makedirs(output_dir, exist_ok=True)
     
-    # Load the raw data
-    df = pd.read_csv(input_file)
+    # Download the raw data from the S3 URL
+    try:
+        response = requests.get(s3_url)
+        response.raise_for_status()  # Raise an error for bad HTTP responses
+        raw_data = response.content.decode('utf-8')
+        print("Raw data successfully downloaded from S3.")
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading data from S3: {e}")
+        return
+
+    # Load the raw data into a DataFrame
+    from io import StringIO
+    df = pd.read_csv(StringIO(raw_data))
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     df = df.sort_values(by='timestamp')
     

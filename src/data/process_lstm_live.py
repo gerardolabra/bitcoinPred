@@ -5,6 +5,7 @@ from ta.momentum import RSIIndicator
 from ta.volatility import BollingerBands
 from ta.trend import MACD
 import joblib
+import requests
 
 def process_lstm_live(window_size=1000):
     """
@@ -12,18 +13,32 @@ def process_lstm_live(window_size=1000):
     Prepares the last `window_size` rows as a sequence for LSTM prediction.
     Saves the processed sequence to a CSV file for live predictions.
     """
+    # Public URL of the raw data in S3
+    s3_url = "https://bitcoin-data-gl.s3.eu-central-1.amazonaws.com/raw/btc_data.csv"
+    
+    # Define the output directory and file
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    input_file = os.path.join(script_dir, '../../data/raw/btc_data.csv')
     numerical_scaler_file = os.path.join(script_dir, '../../data/processed/numerical_scaler.pkl')
     output_dir = os.path.join(script_dir, '../../data/processed')
     output_file = os.path.join(output_dir, 'btc_lstm_live.csv')
     os.makedirs(output_dir, exist_ok=True)
 
-    # Load the raw data
-    df = pd.read_csv(input_file)
+    # Download the raw data from the S3 URL
+    try:
+        response = requests.get(s3_url)
+        response.raise_for_status()  # Raise an error for bad HTTP responses
+        raw_data = response.content.decode('utf-8')
+        print("Raw data successfully downloaded from S3.")
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading data from S3: {e}")
+        return
+
+    # Load the raw data into a DataFrame
+    from io import StringIO
+    df = pd.read_csv(StringIO(raw_data))
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     df = df.sort_values(by='timestamp')
-
+    
     # Extract numerical features from the timestamp
     df['year'] = df['timestamp'].dt.year
     df['month'] = df['timestamp'].dt.month

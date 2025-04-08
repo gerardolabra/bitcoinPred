@@ -6,13 +6,11 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import matplotlib.pyplot as plt
 import numpy as np
 import joblib
-
-# Import your models and stochastic simulation function
 from src.models.stochastic_sim import simulate_btc_prices
 from tensorflow.keras.models import load_model
 import pickle
-
-import subprocess
+import requests
+import os
 import sys
 
 def check_installed_packages():
@@ -39,9 +37,27 @@ def execute_script(script_path):
             capture_output=True,
             text=True
         )
-        st.success(f"Executed {script_path} successfully!")
+        
     except subprocess.CalledProcessError as e:
         st.error(f"Error executing {script_path}: {e.stderr}")
+
+# Function to automatically process data
+def auto_process_data():
+    """
+    Automatically processes data by executing the necessary scripts.
+    """
+    st.info("Automatically processing data. Fresh data is gathered from Binance every 4 hours.")
+    scripts = [
+        "src/data/process_data.py",
+        "src/data/process_linear_next.py",
+        "src/data/process_linear_next_live.py",
+        "src/data/process_lstm.py",
+        "src/data/process_lstm_live.py"
+    ]
+    for script in scripts:
+        execute_script(script)
+
+
 
 # Function to load data
 def load_data(file_path):
@@ -68,9 +84,16 @@ st.sidebar.title("Options")
 # Sidebar options
 st.sidebar.header("Actions")
 
+# Add a button to manually trigger data processing
+if st.sidebar.button("Process Data"):
+    auto_process_data()
+
+# Automatically process data when the app starts
+auto_process_data()
+
+# Model selection
 model_choice = st.sidebar.selectbox("Select a Model", ["LSTM", "Stochastic Simulation", "Linear Regression"])
 
-    
 
 # Main section
 if model_choice == "Linear Regression":

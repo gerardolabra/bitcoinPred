@@ -16,6 +16,7 @@ ta
 streamlit
 joblib
 scipy
-
+pycoingecko
+requests
 
 #-e .
